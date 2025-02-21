@@ -15,7 +15,7 @@ var (
 	bad            = 0
 	tries          = 0
 	writer         = uilive.New()
-	updateInterval = 100 * time.Millisecond
+	updateInterval = 10000 * time.Millisecond
 )
 
 const (
