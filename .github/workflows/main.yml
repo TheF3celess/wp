@@ -1,0 +1,26 @@
+name: Run Go Script
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  run-go-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21' # Change to your Go version
+
+      - name: Install dependencies
+        run: go get -d ./...
+
+      - name: Run Go script
+        run: go run . urls.txt 2000
