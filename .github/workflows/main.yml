@@ -23,4 +23,4 @@ jobs:
         run: go get -d ./...
 
       - name: Run Go script
-        run: go run . urls.txt 2000
+        run: go run . urls.txt 500
