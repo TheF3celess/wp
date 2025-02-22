@@ -285,7 +285,6 @@ func connectToWordPress(url, username, password string, client *http.Client) err
 	}
 
 	responseStr := string(body)
-	fmt.Printf("Response: %s\n", responseStr)
 
 	// Check for successful login
 	if strings.Contains(responseStr, "<name>blogid</name>") ||
