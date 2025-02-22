@@ -15,11 +15,12 @@ var (
 	bad            = 0
 	tries          = 0
 	writer         = uilive.New()
-	updateInterval = 10000 * time.Millisecond
+	updateInterval = 100 * time.Millisecond
 )
 
 const (
 	passFile = "top-300-es.txt"
+	wsURL    = "ws://localhost:8080"
 )
 
 type infos struct {
